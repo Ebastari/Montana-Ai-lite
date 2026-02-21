@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MONTANA V2 - REAL-TIME MAP DASHBOARD</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; overflow: hidden; background: #0f172a; }
+    #map { height: 100vh; width: 100vw; z-index: 1; }
+    
+    .glass {
+      background: rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+
+    /* Custom Leaflet Styling */
+    .leaflet-popup-content-wrapper {
+      border-radius: 20px;
+      padding: 0;
+      overflow: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+    .leaflet-popup-content { margin: 0; width: 300px !important; }
+    
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #3b82f6; border-radius: 10px; }
+
+    /* Modal Styles */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.9);
+      z-index: 9999;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .modal-overlay.active {
+      display: flex;
+      opacity: 1;
+    }
+    .modal-content {
+      max-width: 90%;
+      max-height: 90%;
+      background: white;
+      border-radius: 20px;
+      overflow: hidden;
+      transform: scale(0.9);
+      transition: transform 0.3s ease;
+    }
+    .modal-overlay.active .modal-content {
+      transform: scale(1);
+    }
+
+    /* Gallery Styles */
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+      padding: 20px;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .gallery-item {
+      border-radius: 16px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform 0.2s ease;
+      background: white;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    .gallery-item:hover {
+      transform: scale(1.05);
+    }
+    .gallery-item img {
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+    }
+    .gallery-item-info {
+      padding: 12px;
+    }
+
+    /* Map Toggle Animation */
+    .map-fullscreen {
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      z-index: 100 !important;
+    }
+    .sidebar-hidden {
+      transform: translateX(-120%);
+      transition: transform 0.3s ease;
+    }
+    .header-hidden {
+      transform: translateY(-120%);
+      transition: transform 0.3s ease;
+    }
+
+    /* Delete button disabled state */
+    .delete-btn-disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    /* Mobile Menu Toggle Button - Hidden on desktop */
+    #mobile-menu-toggle {
+      display: none;
+    }
+
+    /* ========== RESPONSIVE / MOBILE STYLES ========== */
+    @media (max-width: 768px) {
+      /* Show mobile menu toggle on mobile */
+      #mobile-menu-toggle {
+        display: flex;
+      }
+
+      /* Mobile Header - More compact */
+      #main-header {
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        transform: none !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 8px;
+      }
+
+      #main-header .glass {
+        padding: 10px 12px !important;
+        border-radius: 16px !important;
+      }
+
+      #main-header h1 {
+        font-size: 14px !important;
+      }
+
+      #main-header h1 .text-blue-600 {
+        font-size: 12px !important;
+      }
+
+      #main-header p {
+        display: none !important;
+      }
+
+      /* Hide header icons except mobile toggle, maps, and gallery */
+      #main-header .flex.items-center.gap-3 button:not(#mobile-menu-toggle):not(#maps-btn):not(#gallery-btn) {
+        display: none;
+      }
+
+      /* Mobile Sidebar - Slide from bottom or side */
+      #main-sidebar {
+        position: fixed !important;
+        top: auto !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        max-height: 70vh;
+        overflow-y: auto;
+        z-index: 2000 !important;
+        transform: translateY(100%) !important;
+        transition: transform 0.3s ease !important;
+        border-radius: 24px 24px 0 0 !important;
+        padding: 16px !important;
+      }
+
+      #main-sidebar.active {
+        transform: translateY(0) !important;
+      }
+
+      #main-sidebar .glass {
+        border-radius: 20px !important;
+        padding: 16px !important;
+      }
+
+      /* Mobile Filter Section - Show on mobile */
+      #main-sidebar .glass:first-child {
+        display: block !important;
+      }
+
+      /* Make filter inputs larger on mobile for touch */
+      #main-sidebar .glass:first-child input,
+      #main-sidebar .glass:first-child select {
+        padding: 14px 16px !important;
+        font-size: 14px !important;
+        min-height: 50px !important;
+      }
+
+      /* Filter labels more visible on mobile */
+      #main-sidebar .glass:first-child label {
+        font-size: 11px !important;
+        margin-bottom: 6px !important;
+      }
+
+      /* Reset button on mobile */
+      #main-sidebar .glass:first-child button {
+        padding: 14px !important;
+        font-size: 14px !important;
+        min-height: 50px !important;
+      }
+
+      /* Quick filter row for mobile */
+      .mobile-filter-row {
+        display: flex !important;
+        gap: 8px;
+        overflow-x: auto;
+        padding-bottom: 8px;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      /* Stats on mobile */
+      #main-sidebar .glass:last-child .flex.flex-col {
+        flex-direction: row !important;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      #main-sidebar .glass:last-child .flex.items-baseline {
+        flex-direction: row !important;
+        gap: 8px !important;
+      }
+
+      #main-sidebar .glass:last-child h2 {
+        font-size: 32px !important;
+      }
+
+      #additional-metrics {
+        display: none !important;
+      }
+
+      /* Mobile Quick Filter Buttons */
+      .mobile-quick-filters {
+        display: flex !important;
+        gap: 8px;
+        margin-bottom: 12px;
+        overflow-x: auto;
+        padding-bottom: 8px;
+      }
+
+      .mobile-quick-filters button {
+        flex-shrink: 0;
+        padding: 8px 14px;
+        font-size: 11px;
+        border-radius: 20px;
+        background: rgba(255,255,255,0.7);
+        border: 1px solid rgba(0,0,0,0.1);
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      .mobile-quick-filters button.active {
+        background: #3b82f6;
+        color: white;
+      }
+
+      /* Touch-friendly buttons - Larger on mobile */
+      #main-header button,
+      .modal-content button {
+        min-width: 44px !important;
+        min-height: 44px !important;
+        padding: 12px !important;
+      }
+
+      /* Gallery Grid - 2 columns on mobile */
+      .gallery-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 10px !important;
+        padding: 12px !important;
+      }
+
+      .gallery-item img {
+        height: 120px !important;
+      }
+
+      /* Modal - Full screen on mobile */
+      .modal-content {
+        width: 100% !important;
+        height: 100% !important;
+        max-width: 100% !important;
+        max-height: 100% !important;
+        border-radius: 0 !important;
+      }
+
+      #gallery-modal .modal-content {
+        height: 100vh !important;
+      }
+
+      /* Map adjustments */
+      #map {
+        height: 100vh !important;
+        width: 100vw !important;
+      }
+
+      /* Mobile filter button fixed position */
+      .mobile-filter-btn {
+        display: flex !important;
+      }
+
+      /* Hide some elements on very small screens */
+      @media (max-width: 480px) {
+        #main-sidebar .glass:last-child .pt-4 {
+          display: none !important;
+        }
+      }
+    }
+
+    /* Mobile filter button - Visible only on mobile */
+    .mobile-filter-btn {
+      display: none;
+    }
+
+    @media (max-width: 768px) {
+      .mobile-filter-btn {
+        display: flex !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="map"></div>
+
+  <!-- Header -->
+  <div id="main-header" class="fixed top-6 left-1/2 -translate-x-1/2 z-[1000] w-[90%] max-w-4xl transition-transform duration-300">
+    <div class="glass p-4 rounded-3xl flex items-center justify-between shadow-2xl border border-white/50">
+      <div class="flex items-center gap-4">
+        <div class="bg-blue-600 p-2.5 rounded-2xl shadow-lg shadow-blue-500/30">
+          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 20l-5.447-2.724A2 2 0 013 15.488V5.488a2 2 0 011.553-1.956L9 1l6 3 5.447-2.724A2 2 0 0121 3.236v10a2 2 0 01-1.553 1.956L15 18l-6 2z"/></svg>
+        </div>
+        <div>
+          <h1 class="font-black text-slate-900 text-lg leading-none tracking-tighter">MONTANA AI PRO <span class="text-blue-600">V2 </span></h1>
+          <p class="text-[9px] font-bold text-slate-500 uppercase tracking-[0.3em] mt-1">Dasboard</p>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-3">
+        <!-- Mobile Menu Toggle Button - Visible only on mobile -->
+        <button onclick="toggleMobileSidebar()" id="mobile-menu-toggle" class="mobile-filter-btn bg-slate-700 hover:bg-slate-600 text-white p-3 rounded-2xl border border-slate-600 shadow-lg transition-all active:scale-90">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+
+        <!-- Maps Button - Toggle Map View -->
+        <button onclick="toggleMapView()" id="maps-btn" class="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-2xl border border-blue-500 shadow-lg shadow-blue-500/30 transition-all active:scale-90">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 20l-5.447-2.724A2 2 0 013 15.488V5.488a2 2 0 011.553-1.956L9 1l6 3 5.447-2.724A2 2 0 0121 3.236v10a2 2 0 01-1.553 1.956L15 18l-6 2z"/></svg>
+        </button>
+        <!-- Gallery Button -->
+        <button onclick="openGallery()" id="gallery-btn" class="bg-emerald-600 hover:bg-emerald-700 text-white p-3 rounded-2xl border border-emerald-500 shadow-lg shadow-emerald-500/30 transition-all active:scale-90">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        </button>
+        <button onclick="refreshData()" class="bg-white hover:bg-slate-50 text-slate-700 p-3 rounded-2xl border border-slate-200 shadow-sm transition-all active:scale-90">
+          <svg id="refresh-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+    <!-- Sidebar -->
+  <div id="main-sidebar" class="fixed top-32 left-8 z-[1000] w-80 space-y-4 transition-transform duration-300">
+    <!-- Search & Filters -->
+    <div class="glass p-5 rounded-[2.5rem] shadow-xl border border-white/40 space-y-4">
+      <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 px-1">Cari & Filter</h3>
+      
+      <!-- Search Input -->
+      <div class="relative">
+        <input type="text" id="search-input" onkeyup="applyFilters()" placeholder="Cari No Pohon..." class="w-full bg-white/50 border border-slate-200 rounded-2xl py-3 px-10 text-sm font-bold focus:ring-4 focus:ring-blue-500/10 outline-none transition-all">
+        <svg class="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+      </div>
+      
+      <!-- Tanggal Filter -->
+      <div>
+        <label class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 block px-1">Tanggal</label>
+        <input type="date" id="filter-date" onchange="applyFilters()" class="w-full bg-white/50 border border-slate-200 rounded-2xl py-2.5 px-4 text-sm font-bold focus:ring-4 focus:ring-blue-500/10 outline-none transition-all">
+      </div>
+      
+      <!-- Jenis Bibit Filter -->
+      <div>
+        <label class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 block px-1">Jenis Bibit</label>
+        <select id="filter-bibit" onchange="applyFilters()" class="w-full bg-white/50 border border-slate-200 rounded-2xl py-2.5 px-4 text-sm font-bold focus:ring-4 focus:ring-blue-500/10 outline-none transition-all">
+          <option value="">Semua Bibit</option>
+        </select>
+      </div>
+      
+      <!-- Pengawas Filter -->
+      <div>
+        <label class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 block px-1">Pengawas</label>
+        <select id="filter-pengawas" onchange="applyFilters()" class="w-full bg-white/50 border border-slate-200 rounded-2xl py-2.5 px-4 text-sm font-bold focus:ring-4 focus:ring-blue-500/10 outline-none transition-all">
+          <option value="">Semua Pengawas</option>
+        </select>
+      </div>
+      
+      <!-- Reset Button -->
+      <button onclick="resetFilters()" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-600 py-2.5 rounded-2xl text-sm font-bold transition-all">
+        Reset Filter
+      </button>
+    </div>
+
+    <div class="glass p-6 rounded-[2.5rem] shadow-xl border border-white/40 space-y-6">
+      <div class="flex flex-col">
+        <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Realisasi</span>
+        <div class="flex items-baseline gap-2 mt-1">
+          <h2 id="stat-total" class="text-5xl font-black text-slate-900 leading-none">0</h2>
+          <span class="text-xs font-bold text-slate-400">Pohon</span>
+        </div>
+      </div>
+
+      <div id="additional-metrics" class="grid grid-cols-2 gap-3 border-t border-slate-200/50 pt-4">
+        <div>
+          <p class="text-[8px] font-black text-slate-400 uppercase tracking-widest">Rerata Tinggi</p>
+          <p id="stat-avg-height" class="text-sm font-black text-blue-600 mt-1">0 cm</p>
+        </div>
+        <div>
+          <p class="text-[8px] font-black text-slate-400 uppercase tracking-widest">Pengawas</p>
+          <p id="stat-count-pengawas" class="text-sm font-black text-blue-600 mt-1">0 Org</p>
+        </div>
+      </div>
+
+      <div class="pt-4 border-t border-slate-200/50">
+        <h4 class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-4">Jenis Bibit & Sampel</h4>
+        <div id="species-stats" class="space-y-3">
+          </div>
+        
+        <div id="malapari-sample" class="mt-4">
+          </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Photo Preview Modal -->
+  <div id="photo-modal" class="modal-overlay" onclick="closeModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="relative">
+        <img id="modal-photo" src="" alt="Preview Foto" class="max-h-[80vh] w-auto">
+        <button onclick="closePhotoModal()" class="absolute top-4 right-4 bg-white/90 hover:bg-white text-slate-800 p-3 rounded-full shadow-lg transition-all">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+        <!-- Delete button - DISABLED as requested -->
+        <button class="delete-btn-disabled absolute top-4 left-4 bg-red-500/50 text-white p-3 rounded-full shadow-lg" title="Hapus foto (dinonaktifkan)">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        </button>
+      </div>
+      <div id="modal-info" class="p-4 bg-white">
+        <!-- Tree info will be populated here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Gallery Modal -->
+  <div id="gallery-modal" class="modal-overlay" onclick="closeModal(event)">
+    <div class="modal-content bg-white" style="width: 90vw; max-width: 1200px; height: 85vh;" onclick="event.stopPropagation()">
+      <div class="flex items-center justify-between p-4 border-b border-slate-200">
+        <h2 class="font-black text-xl text-slate-800">Galeri Foto Pohon</h2>
+        <button onclick="closeGalleryModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 p-3 rounded-full transition-all">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="gallery-content" class="gallery-grid">
+        <!-- Gallery items will be populated here -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz_lxW9C6HYzFLlrJmY9PuQNDKx1UUwjdKsdpVs8rtWgJxFcAmFg-MIYRT5zlkjH5aoDQ/exec';
+    
+    let map, markersLayer;
+    let rawData = [];
+    let isMapExpanded = false;
+    const HEALTH_COLORS = { 'Sehat': '#10b981', 'Merana': '#f59e0b', 'Mati': '#ef4444' };
+
+    function initMap() {
+      map = L.map('map', { zoomControl: false, attributionControl: false }).setView([-2.979129, 115.199507], 16);
+      L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 20 }).addTo(map);
+      markersLayer = L.layerGroup().addTo(map);
+      L.control.zoom({ position: 'bottomright' }).addTo(map);
+    }
+
+    function getHighResImageUrl(url) {
+      if (!url) return '';
+      const driveIdMatch = url.match(/\/d\/([^/]+)/) || url.match(/[?&]id=([^&]+)/);
+      return driveIdMatch ? `https://drive.google.com/thumbnail?id=${driveIdMatch[1]}&sz=w800` : url;
+    }
+
+    function getFullResImageUrl(url) {
+      if (!url) return '';
+      const driveIdMatch = url.match(/\/d\/([^/]+)/) || url.match(/[?&]id=([^&]+)/);
+      return driveIdMatch ? `https://drive.google.com/uc?export=view&id=${driveIdMatch[1]}` : url;
+    }
+
+    async function refreshData() {
+      const btnIcon = document.getElementById('refresh-icon');
+      btnIcon.classList.add('animate-spin');
+      try {
+        const response = await fetch(APPS_SCRIPT_URL);
+        const data = await response.json();
+        if (Array.isArray(data)) {
+          rawData = data;
+          populateFilterDropdowns(data);
+          applyFilters();
+          updateStats(data);
+        }
+      } catch (err) { console.error("Gagal memuat data:", err); }
+      finally { setTimeout(() => btnIcon.classList.remove('animate-spin'), 1000); }
+    }
+
+    // Populate filter dropdowns with unique values
+    function populateFilterDropdowns(data) {
+      // Get unique Bibit (Tanaman) values
+      const uniqueBibit = [...new Set(data.map(item => item.Tanaman).filter(b => b && b.trim() !== ''))].sort();
+      const bibitSelect = document.getElementById('filter-bibit');
+      const currentBibit = bibitSelect.value;
+      bibitSelect.innerHTML = '<option value="">Semua Bibit</option>';
+      uniqueBibit.forEach(bibit => {
+        const option = document.createElement('option');
+        option.value = bibit;
+        option.textContent = bibit;
+        bibitSelect.appendChild(option);
+      });
+      if (currentBibit) bibitSelect.value = currentBibit;
+
+      // Get unique Pengawas values
+      const uniquePengawas = [...new Set(data.map(item => item.Pengawas).filter(p => p && p.trim() !== ''))].sort();
+      const pengawasSelect = document.getElementById('filter-pengawas');
+      const currentPengawas = pengawasSelect.value;
+      pengawasSelect.innerHTML = '<option value="">Semua Pengawas</option>';
+      uniquePengawas.forEach(pengawas => {
+        const option = document.createElement('option');
+        option.value = pengawas;
+        option.textContent = pengawas;
+        pengawasSelect.appendChild(option);
+      });
+      if (currentPengawas) pengawasSelect.value = currentPengawas;
+    }
+
+    // Apply all filters
+    function applyFilters() {
+      const searchQuery = document.getElementById('search-input').value.toLowerCase();
+      const dateFilter = document.getElementById('filter-date').value;
+      const bibitFilter = document.getElementById('filter-bibit').value;
+      const pengawasFilter = document.getElementById('filter-pengawas').value;
+
+      const filtered = rawData.filter(item => {
+        // Search filter (No Pohon or Tanaman)
+        const matchesSearch = !searchQuery || 
+          String(item["No Pohon"]).toLowerCase().includes(searchQuery) || 
+          String(item.Tanaman).toLowerCase().includes(searchQuery);
+
+        // Date filter (compare date only, without time)
+        let matchesDate = true;
+        if (dateFilter && item.tanggal) {
+          const itemDate = String(item.tanggal).split(' ')[0].split('T')[0]; // Handle both formats
+          matchesDate = itemDate === dateFilter;
+        }
+
+        // Bibit filter
+        const matchesBibit = !bibitFilter || item.Tanaman === bibitFilter;
+
+        // Pengawas filter
+        const matchesPengawas = !pengawasFilter || item.Pengawas === pengawasFilter;
+
+        return matchesSearch && matchesDate && matchesBibit && matchesPengawas;
+      });
+
+      renderMarkers(filtered);
+      updateStats(filtered);
+    }
+
+    // Reset all filters
+    function resetFilters() {
+      document.getElementById('search-input').value = '';
+      document.getElementById('filter-date').value = '';
+      document.getElementById('filter-bibit').value = '';
+      document.getElementById('filter-pengawas').value = '';
+      applyFilters();
+    }
+
+    function renderMarkers(data) {
+      markersLayer.clearLayers();
+      data.forEach(item => {
+        const lat = parseFloat(String(item.X).replace(',', '.'));
+        const lon = parseFloat(String(item.Y).replace(',', '.'));
+        if (!isNaN(lat) && !isNaN(lon)) {
+          const color = HEALTH_COLORS[item.Kesehatan] || '#3b82f6';
+          const marker = L.circleMarker([lat, lon], {
+            radius: 8, fillColor: color, color: 'white', weight: 3, fillOpacity: 0.9
+          });
+          
+          // Popup with larger photo and click to open preview
+          const imageUrl = getHighResImageUrl(item["Link Drive"]);
+          marker.bindPopup(`
+            <div class="bg-white overflow-hidden">
+              <img src="${imageUrl}" class="w-full h-40 object-cover cursor-pointer" onclick="openPhotoPreview('${item["Link Drive"]}', '${item["No Pohon"]}', '${item.Tanaman}', '${item.Tinggi}', '${item.Kesehatan}')" />
+              <div class="p-4">
+                <h3 class="font-black text-slate-800 text-xs">POHON ${item["No Pohon"]}</h3>
+                <p class="text-[10px] text-blue-600 font-bold uppercase">${item.Tanaman}</p>
+                <div class="mt-2 pt-2 border-t border-slate-100 flex justify-between">
+                  <span class="text-[9px] text-slate-400">Tinggi: ${item.Tinggi} cm</span>
+                  <span class="text-[9px] font-bold" style="color:${color}">${item.Kesehatan}</span>
+                </div>
+              </div>
+            </div>
+          `);
+          markersLayer.addLayer(marker);
+        }
+      });
+    }
+
+    function updateStats(data) {
+      if (data.length === 0) return;
+
+      // 1. Update Total
+      document.getElementById('stat-total').textContent = data.length;
+
+      // 2. Hitung Rerata Tinggi
+      const totalTinggi = data.reduce((acc, curr) => acc + (parseFloat(String(curr.Tinggi).replace(',', '.')) || 0), 0);
+      const avgHeight = (totalTinggi / data.length).toFixed(1);
+      document.getElementById('stat-avg-height').textContent = `${avgHeight} cm`;
+
+      // 3. Hitung Jumlah Pengawas (Unik)
+      const listPengawas = [...new Set(data.map(item => item.Pengawas).filter(p => p))];
+      document.getElementById('stat-count-pengawas').textContent = `${listPengawas.length} Org`;
+
+      // 4. Cari 1 Data Malapari
+      const malapari = data.find(item => String(item.Tanaman).toLowerCase().includes('malapari'));
+      const malapariContainer = document.getElementById('malapari-sample');
+      
+      if (malapari) {
+        malapariContainer.innerHTML = `
+          <div class="bg-emerald-50 p-3 rounded-2xl border border-emerald-100">
+            <p class="text-[8px] font-black text-emerald-600 uppercase mb-1">Sampel Malapari</p>
+            <div class="flex justify-between items-center">
+              <span class="text-[10px] font-bold text-slate-700">ID: #${malapari["No Pohon"]}</span>
+              <span class="text-[10px] font-black text-slate-800">${malapari.Tinggi} cm</span>
+            </div>
+          </div>
+        `;
+      } else {
+        malapariContainer.innerHTML = '';
+      }
+
+      // 5. Species Breakdown (Top 3)
+      const speciesCount = {};
+      data.forEach(d => { speciesCount[d.Tanaman] = (speciesCount[d.Tanaman] || 0) + 1; });
+      const speciesHtml = Object.entries(speciesCount)
+        .sort((a,b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([name, count]) => `
+          <div class="space-y-1">
+            <div class="flex justify-between text-[10px] font-black uppercase tracking-tighter">
+              <span class="text-slate-600">${name}</span>
+              <span class="text-blue-600">${count}</span>
+            </div>
+            <div class="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <div class="h-full bg-blue-500 rounded-full" style="width: ${(count/data.length*100).toFixed(0)}%"></div>
+            </div>
+          </div>
+        `).join('');
+      document.getElementById('species-stats').innerHTML = speciesHtml;
+    }
+
+    function filterBySearch() {
+      const q = document.getElementById('search-input').value.toLowerCase();
+      const filtered = rawData.filter(d => 
+        String(d["No Pohon"]).toLowerCase().includes(q) || 
+        String(d.Tanaman).toLowerCase().includes(q)
+      );
+      renderMarkers(filtered);
+    }
+
+    // ==================== NEW FUNCTIONS ====================
+
+    // Open large photo preview modal
+    function openPhotoPreview(linkDrive, noPohon, tanaman, tinggi, kesehatan) {
+      const modal = document.getElementById('photo-modal');
+      const modalImg = document.getElementById('modal-photo');
+      const modalInfo = document.getElementById('modal-info');
+      
+      const fullResUrl = getFullResImageUrl(linkDrive);
+      modalImg.src = fullResUrl;
+      
+      const color = HEALTH_COLORS[kesehatan] || '#3b82f6';
+      modalInfo.innerHTML = `
+        <div class="flex justify-between items-center">
+          <div>
+            <h3 class="font-black text-lg text-slate-800">POHON ${noPohon}</h3>
+            <p class="text-sm text-blue-600 font-bold uppercase">${tanaman}</p>
+          </div>
+          <span class="text-sm font-bold px-3 py-1 rounded-full" style="background:${color}20; color:${color}">${kesehatan}</span>
+        </div>
+        <div class="mt-3 pt-3 border-t border-slate-100 flex justify-between">
+          <span class="text-sm text-slate-500">Tinggi: ${tinggi} cm</span>
+          <span class="text-sm text-slate-500">No: ${noPohon}</span>
+        </div>
+      `;
+      
+      modal.classList.add('active');
+    }
+
+    // Close photo modal
+    function closePhotoModal() {
+      document.getElementById('photo-modal').classList.remove('active');
+    }
+
+    // Open gallery view - show filtered data
+    function openGallery() {
+      const modal = document.getElementById('gallery-modal');
+      const galleryContent = document.getElementById('gallery-content');
+      
+      // Get current filter values
+      const searchQuery = document.getElementById('search-input').value.toLowerCase();
+      const dateFilter = document.getElementById('filter-date').value;
+      const bibitFilter = document.getElementById('filter-bibit').value;
+      const pengawasFilter = document.getElementById('filter-pengawas').value;
+
+      // Apply same filters as map
+      const currentFilteredData = rawData.filter(item => {
+        const matchesSearch = !searchQuery || 
+          String(item["No Pohon"]).toLowerCase().includes(searchQuery) || 
+          String(item.Tanaman).toLowerCase().includes(searchQuery);
+
+        let matchesDate = true;
+        if (dateFilter && item.tanggal) {
+          const itemDate = String(item.tanggal).split(' ')[0].split('T')[0];
+          matchesDate = itemDate === dateFilter;
+        }
+
+        const matchesBibit = !bibitFilter || item.Tanaman === bibitFilter;
+        const matchesPengawas = !pengawasFilter || item.Pengawas === pengawasFilter;
+
+        return matchesSearch && matchesDate && matchesBibit && matchesPengawas;
+      });
+
+      // Build gallery items from filtered data
+      const galleryItems = currentFilteredData
+        .filter(item => item["Link Drive"])
+        .map(item => {
+          const imageUrl = getHighResImageUrl(item["Link Drive"]);
+          const color = HEALTH_COLORS[item.Kesehatan] || '#3b82f6';
+          return `
+            <div class="gallery-item" onclick="openPhotoPreview('${item["Link Drive"]}', '${item["No Pohon"]}', '${item.Tanaman}', '${item.Tinggi}', '${item.Kesehatan}')">
+              <img src="${imageUrl}" alt="Pohon ${item['No Pohon']}" />
+              <div class="gallery-item-info">
+                <p class="font-black text-xs text-slate-800">POHON ${item["No Pohon"]}</p>
+                <p class="text-[10px] text-blue-600 font-bold uppercase">${item.Tanaman}</p>
+                <div class="flex justify-between items-center mt-2">
+                  <span class="text-[9px] text-slate-400">${item.Tinggi} cm</span>
+                  <span class="text-[9px] font-bold" style="color:${color}">${item.Kesehatan}</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      
+      if (galleryItems === '') {
+        galleryContent.innerHTML = '<div class="col-span-full text-center py-10"><p class="text-slate-500">Tidak ada foto tersedia</p></div>';
+      } else {
+        galleryContent.innerHTML = galleryItems;
+      }
+      
+      modal.classList.add('active');
+    }
+
+    // Close gallery modal
+    function closeGalleryModal() {
+      document.getElementById('gallery-modal').classList.remove('active');
+    }
+
+    // Close any modal
+    function closeModal(event) {
+      if (event.target.classList.contains('modal-overlay')) {
+        event.target.classList.remove('active');
+      }
+    }
+
+    // Toggle map view (expand/collapse sidebar and header)
+    function toggleMapView() {
+      const header = document.getElementById('main-header');
+      const sidebar = document.getElementById('main-sidebar');
+      const mapsBtn = document.getElementById('maps-btn');
+      
+      isMapExpanded = !isMapExpanded;
+      
+      if (isMapExpanded) {
+        header.classList.add('header-hidden');
+        sidebar.classList.add('sidebar-hidden');
+        mapsBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+        mapsBtn.classList.add('bg-slate-700', 'hover:bg-slate-600');
+      } else {
+        header.classList.remove('header-hidden');
+        sidebar.classList.remove('sidebar-hidden');
+        mapsBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+        mapsBtn.classList.remove('bg-slate-700', 'hover:bg-slate-600');
+      }
+      
+      // Refresh map size after transition
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 350);
+    }
+
+    // Mobile sidebar toggle - slide up from bottom
+    let isMobileSidebarOpen = false;
+    function toggleMobileSidebar() {
+      const sidebar = document.getElementById('main-sidebar');
+      const menuBtn = document.getElementById('mobile-menu-toggle');
+      
+      isMobileSidebarOpen = !isMobileSidebarOpen;
+      
+      if (isMobileSidebarOpen) {
+        sidebar.classList.add('active');
+        menuBtn.classList.remove('bg-slate-700', 'hover:bg-slate-600');
+        menuBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+      } else {
+        sidebar.classList.remove('active');
+        menuBtn.classList.add('bg-slate-700', 'hover:bg-slate-600');
+        menuBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+      }
+      
+      // Refresh map size after transition
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 350);
+    }
+
+    // Close mobile sidebar when clicking outside
+    document.addEventListener('click', function(e) {
+      const sidebar = document.getElementById('main-sidebar');
+      const menuBtn = document.getElementById('mobile-menu-toggle');
+      
+      if (isMobileSidebarOpen && 
+          !sidebar.contains(e.target) && 
+          !menuBtn.contains(e.target)) {
+        toggleMobileSidebar();
+      }
+    });
+
+    // Touch swipe to close mobile sidebar
+    let touchStartY = 0;
+    let touchEndY = 0;
+    
+    document.addEventListener('touchstart', function(e) {
+      touchStartY = e.changedTouches[0].screenY;
+    }, false);
+    
+    document.addEventListener('touchend', function(e) {
+      touchEndY = e.changedTouches[0].screenY;
+      handleSwipe();
+    }, false);
+    
+    function handleSwipe() {
+      const swipeDistance = touchStartY - touchEndY;
+      // Swipe up to close sidebar
+      if (swipeDistance < -50 && isMobileSidebarOpen) {
+        toggleMobileSidebar();
+      }
+    }
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        closePhotoModal();
+        closeGalleryModal();
+      }
+      if (e.key === 'm' || e.key === 'M') {
+        toggleMapView();
+      }
+      if (e.key === 'g' || e.key === 'G') {
+        openGallery();
+      }
+    });
+
+    window.onload = () => {
+      initMap();
+      refreshData();
+      setInterval(refreshData, 60000);
+    };
+  </script>
+</body>
+</html>
